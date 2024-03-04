@@ -4,5 +4,5 @@ ESP32-based scale that emulates a "Decent Scale" via Bluetooth Low Energy (BLE),
 ## Concept Renders
 ![With cover](./img/wCover.PNG) With cover  
 ![Without cover](./img/w:oCover.PNG) Without cover  
-![Calibration button](./img/calbutton.PNG) Calibration button
+![Calibration button](./img/calbutton.png) Calibration button
  
