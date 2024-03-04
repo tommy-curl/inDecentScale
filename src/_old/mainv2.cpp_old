@@ -1,0 +1,124 @@
+#include <Arduino.h>
+#include <Arduino_FreeRTOS.h>
+#include <task.h>
+#include <Preferences.h>
+#include <esp_timer.h>
+#include <esp_sleep.h>
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#include <BLEAdvertising.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <HX711.h>
+
+// Add OLED pin definitions
+#define OLED_RESET    -1
+#define SCREEN_WIDTH  128
+#define SCREEN_HEIGHT 64
+#define OLED_SDA      21
+#define OLED_SCL      22
+
+// Add HX711 pin definitions
+#define DT_PIN 25
+#define SCK_PIN 26
+#define DOUT_PIN 14  // DOUT connection
+#define HX711_GAIN_FACTOR 128
+
+// Add button pin definitions
+#define BUTTON1_PIN   18
+#define BUTTON2_PIN   19
+#define DEBOUNCE_DELAY 50
+#define AUTOSTANDBY 900000 // Time to go sleep in ms
+
+// Global objects
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+HX711 scale;
+Preferences preferences;
+
+// Function prototypes
+void taskReadSensors(void *parameter);
+void taskBLEServer(void *parameter);
+
+// Define task handles
+TaskHandle_t TaskHandle_ReadSensors = NULL;
+TaskHandle_t TaskHandle_BLEServer = NULL;
+
+void setup() {
+    Serial.begin(115200);
+    preferences.begin("inDecentScale", false);
+    Wire.begin(OLED_SDA, OLED_SCL);
+    scale.begin(DT_PIN, SCK_PIN);
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    pinMode(DOUT_PIN, INPUT);
+    pinMode(BUTTON1_PIN, INPUT_PULLUP);
+    pinMode(BUTTON2_PIN, INPUT_PULLUP);
+
+    // Create tasks
+    xTaskCreatePinnedToCore(taskReadSensors, "ReadSensors", 4096, NULL, 1, &TaskHandle_ReadSensors, 0);
+    xTaskCreatePinnedToCore(taskBLEServer, "BLEServer", 4096, NULL, 2, &TaskHandle_BLEServer, 1);
+}
+
+void loop() {
+    // Empty. Everything is handled in tasks.
+}
+
+void taskReadSensors(void *parameter) {
+    uint64_t startTime = 0;
+    uint64_t timer_elapsed = 0;
+
+    for (;;) {
+        // Read data from the load cell
+        uint64_t weight = scale.get_units(preferences.getFloat("calibrationFactor"));
+
+        // Display on OLED screen
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setCursor(0, 0);
+        display.print("Weight: ");
+        display.print(weight);
+        display.println(" g");
+        display.display();
+
+        // Sleep for a short period
+        delay(100);
+
+        // Check if the timer needs to start
+        if (digitalRead(BUTTON1_PIN) == LOW) {
+            startTime = esp_timer_get_time();
+        }
+
+        // Check if the timer needs to stop
+        if (digitalRead(BUTTON2_PIN) == LOW) {
+            startTime = 0; // Reset timer
+        }
+
+        // Calculate elapsed time if the timer is running
+        if (startTime != 0) {
+            timer_elapsed = esp_timer_get_time() - startTime;
+            Serial.print("Elapsed time: ");
+            Serial.println(timer_elapsed);
+        }
+    }
+}
+
+void taskBLEServer(void *parameter) {
+    BLEDevice::init("Decent Scale");
+    BLEServer *pServer = BLEDevice::createServer();
+    BLEService *pService = pServer->createService("0000FFF0-0000-1000-8000-00805F9B34FB");
+    BLECharacteristic *pCharacteristic = pService->createCharacteristic(
+        "0000FFF4-0000-1000-8000-00805F9B34FB",
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
+    );
+    pCharacteristic->setValue("Hello World");
+    pService->start();
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID("0000FFF0-0000-1000-8000-00805F9B34FB");
+    pAdvertising->setScanResponse(true);
+    pAdvertising->start();
+    for (;;) {
+        // Handle BLE events here
+        delay(1000);
+    }
+}

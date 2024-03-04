@@ -1,0 +1,227 @@
+/*
+This code is the firmware for an ESP32 operated HX711 Scale. 
+It communicates over BLE and is meant to imitate a "Decent Scale" for all its intagrations and App functions 
+*/
+
+#include <Arduino.h>
+#include <Preferences.h>
+#include <esp_timer.h>
+#include <esp_sleep.h>
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#include <BLEAdvertising.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <HX711.h>
+#include "ICON_BMP.h"
+
+
+// Add OLED pin definitions
+#define OLED_RESET    -1
+#define SCREEN_WIDTH  128
+#define SCREEN_HEIGHT 64
+
+#define OLED_SDA      21
+#define OLED_SCL      22
+// Add HX711 pin definitions
+#define DT_PIN 25
+#define SCK_PIN 26
+#define DOUT_PIN 14  // DOUT connection
+#define HX711_GAIN_FACTOR 128
+// Add button pin definitions
+#define BUTTON1_PIN   18
+#define BUTTON2_PIN   19
+#define DEBOUNCE_DELAY 50
+#define AUTOSTANDBY 900000 // Time to go sleep in ms
+
+
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+HX711 scale;
+Preferences preferences;
+uint64_t startTime; // Variable to hold the start time in microseconds
+uint64_t timer_elapsed;
+
+const char* serviceUUID = "0000FFF0-0000-1000-8000-00805F9B34FB";
+const char* characteristicUUID = "0000FFF4-0000-1000-8000-00805F9B34FB";
+const char* deviceName = "Decent Scale";
+static bool bleClientConnected = false;
+static float calibrationFactor;
+volatile bool timer_running = false;
+volatile int powerOnTime = esp_timer_get_time();
+volatile uint64_t last_button1_time = 0;
+volatile uint64_t last_button2_time = 0;
+
+
+class MyCallbacks : public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+
+      if (value.length() == 0) {
+        return;
+      }
+
+      // Handle BLE data here
+    }
+};
+
+// Function to enable LCD display
+void enable_lcd() {
+    // Turn on the display
+  display.ssd1306_command(SSD1306_DISPLAYON);
+}
+
+// Function to disable LCD display for Decent Scale
+void disable_lcd() {
+  // Clear the buffer
+  display.clearDisplay();
+  // Turn off the display
+  display.ssd1306_command(SSD1306_DISPLAYOFF);
+}
+
+void scaleDisplay(uint8_t mode, uint64_t weight = 0, uint64_t time = 0) {
+    switch(mode) {
+        case 0:
+            // Bootscreen
+            display.clearDisplay();
+            display.drawBitmap(0, 0, bootscreen, 128, 64, WHITE);
+            break;
+        case 1:
+            display.clearDisplay();
+            display.setTextSize(1);
+            display.setCursor(0, 0);
+            if(bleClientConnected == true){
+                display.drawBitmap(0, 0, bluetooth_bmpbluetoothtopright, 128, 64, WHITE);
+            }
+            display.print("Weight: ");
+            display.print(weight);
+            display.println(" g");
+            display.print("Timer: ");
+            display.print(time);
+            display.println(" sec");
+            display.display();
+            break;
+        case 2:
+            // Calibration Interface
+            display.clearDisplay();
+            display.println("Calibrate with 50g weight");
+            display.display();
+            break;
+        default:
+            // Handle invalid mode
+            // You can choose to do nothing, print an error message, or take other actions.
+            break;
+    }
+}
+
+// Function to start the timer
+void scale_timer_start() {
+  //start keeping track of the time
+  startTime = esp_timer_get_time(); // Record the current time in microseconds
+  timer_running = true;
+}
+// Callback function to get the elapsed time since the start of the timer
+uint64_t update_timer() {
+  timer_elapsed = esp_timer_get_time() - startTime; // Calculate elapsed time in microseconds
+  return timer_elapsed; 
+}
+// Function to stop the timer
+void scale_timer_stop() {
+  //stop keeping track of the time
+  timer_running = false;
+}
+
+void button1_pressed() {
+  if (millis() - last_button1_time > DEBOUNCE_DELAY) {
+    last_button1_time = millis();
+    // Handle button 1 press directly here
+    if(timer_running == false){
+    scale_timer_start();
+  } else{
+    scale_timer_stop();
+  }
+  }
+}
+
+void button2_pressed() {
+  if (millis() - last_button2_time > DEBOUNCE_DELAY) {
+    last_button2_time = millis();
+    // Handle button 2 press directly here
+  }
+}
+
+void calibrateScale(float knownWeight) {
+  scaleDisplay(2);
+  delay(5000); // Delay to allow time for placing the weight
+  long referenceUnit = scale.read(); // Get reference raw value
+  calibrationFactor = knownWeight / referenceUnit;
+
+  scale.set_scale(calibrationFactor); // Set calibration factor
+  // Save calibration factor to EEPROM
+  preferences.putFloat("calibrationFactor", calibrationFactor);
+}
+
+void hx711interrupt(){
+  detachInterrupt(digitalPinToInterrupt(DOUT_PIN));
+  powerOnTime = esp_timer_get_time();
+}
+
+
+
+
+
+void setup() {
+  Serial.begin(115200);
+  preferences.begin("inDecentScale", false); // ("name", read-only OFF)
+  Wire.begin(OLED_SDA, OLED_SCL);
+  scale.begin(DT_PIN, SCK_PIN);
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.display();
+  scaleDisplay(0);
+  pinMode(DOUT_PIN, INPUT);
+  pinMode(BUTTON1_PIN, INPUT_PULLUP); // Set buttonPin1 as input with internal pull-up resistor
+  pinMode(BUTTON2_PIN, INPUT_PULLUP); // Set buttonPin2 as input with internal pull-up resistor
+  attachInterrupt(digitalPinToInterrupt(BUTTON1_PIN), button1_pressed, FALLING); // Attach interrupt for button 1
+  //attachInterrupt(digitalPinToInterrupt(BUTTON2_PIN), button2_pressed, FALLING); // Attach interrupt for button 2
+  if(BUTTON2_PIN == LOW){
+    // Calibrate the scale
+    calibrateScale(50.0); // Calibrate with a 50g weight
+  }
+  // Read calibration factor from EEPROM
+  scale.set_scale(preferences.getFloat("calibrationFactor"));
+  scale.set_gain(HX711_GAIN_FACTOR);
+
+  BLEDevice::init(deviceName);
+  pServer = BLEDevice::createServer();
+  BLEService *pService = pServer->createService(serviceUUID);
+  BLECharacteristic *pCharacteristic = pService->createCharacteristic(
+                                         characteristicUUID,
+                                         BLECharacteristic::PROPERTY_WRITE
+                                       );
+  pCharacteristic->setCallbacks(new MyCallbacks());
+  pService->start();
+  
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(serviceUUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->start();
+}
+
+
+void loop() {
+  // Read data from the load cell
+  uint64_t weight = scale.get_units(calibrationFactor);
+  // Update the elapsed time from timer start event
+  update_timer();
+  // Display on OLED screen
+  scaleDisplay(1, weight, timer_elapsed);
+  if(powerOnTime - esp_timer_get_time() > AUTOSTANDBY){
+    attachInterrupt(digitalPinToInterrupt(DOUT_PIN), hx711interrupt, FALLING);
+    esp_deep_sleep_start();
+    scale_timer_stop();
+    disable_lcd();
+  }
+  delay(10); // Update every 10 milliseconds
+}
