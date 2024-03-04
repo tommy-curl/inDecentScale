@@ -287,8 +287,8 @@ void scaleDisplay(uint8_t mode, uint16_t weight, uint64_t time) {
 
 
         // Calculate the starting coordinates to center the text 
-        startX = (110 - totalWidth) / 2;
-        startY = (64 - display.height()) / 2;
+        startX = (totalWidth - 110) / 2;
+        startY = (display.height() - 64) / 2;
 
         // Set cursor position for timer text and Print the timer value
         display.setCursor(startX, startY);
