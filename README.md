@@ -3,6 +3,8 @@ ESP32-based scale that emulates a "Decent Scale" via Bluetooth Low Energy (BLE),
 
 Why? For use with Apps like Beanconqueror, etc. 
 
+### STATUS: Currently in Prototyping stage!
+
 ## Disclaimer: this code has not been tested!
 There may be (probably a lot of) bugs and errors! You have been warned.
 
@@ -16,14 +18,26 @@ There may be (probably a lot of) bugs and errors! You have been warned.
  - Lithium Battery powered with BMS
  - USB C charging 
 
-
 ## Concept Renders
 These pictures are a Render of the 3D design and are subject to change.
 ![With cover](./img/wCover.PNG) With cover  
 ![Without cover](./img/w:oCover.PNG) Without cover  
 ![Calibration button](./img/calbutton.png) Calibration button
- 
+
+## BOM - Bill of Materials
+Coming soon!
+
 ## Dependencies
  - VScode
  - platformio
 all libraries, environment and flashing are going to be kept care of by platformio
+
+### Additional Info 
+#### DecentScale API info:
+[DecentScale API](https://decentespresso.com/decentscale_api)
+
+## Contribution and Use
+You are free to commit to this Project and use the code and designs for your own projects.
+
+## Credits
+Big thanks to John Buckman and the whole Decent Espresso Team for what they've done for the community. Thanks to all the contributors of Beanconqueror
