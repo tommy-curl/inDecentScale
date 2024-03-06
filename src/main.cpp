@@ -22,7 +22,7 @@ It communicates over BLE and is meant to imitate a "Decent Scale" for all its in
 #include "ICON_BMP.h"
 
 
-// Add OLED pin definitions
+// Add OLED pin definition 
 #define OLED_RESET    -1
 #define SCREEN_WIDTH  128
 #define SCREEN_HEIGHT 64
