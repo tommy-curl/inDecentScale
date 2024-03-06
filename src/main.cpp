@@ -30,10 +30,11 @@ It communicates over BLE and is meant to imitate a "Decent Scale" for all its in
 #define OLED_SDA      21
 #define OLED_SCL      22
 // Add HX711 pin definitions
-#define DT_PIN 25
-#define SCK_PIN 26
-#define DOUT_PIN 14  // DOUT connection
-#define HX711_GAIN_FACTOR 128
+#define DT_PIN 16
+#define SCK_PIN 4
+#define DOUT_PIN 13  // DOUT connection
+#define HX711_GAIN_FACTOR 64
+#define NUM_SAMPLE_AVG 5 // Number of samples to be averaged
 // Autotare/weight stability
 #define WEIGHT_STABILITY_THRESHOLD 1.0 // Threshold for weight stability in grams
 #define TIMER_START_DELAY 5000 // Delay in milliseconds to start the timer after weight increase
@@ -156,7 +157,7 @@ void taskReadSensors(void *parameter) {
 for (;;) {
   // Read data from the load cell
   xSemaphoreTake(dataMutex, portMAX_DELAY); // Acquire mutex before accessing shared resources
-  weight = scale.get_units(3) / calibrationFactor; // Get weight in grams
+  weight = scale.get_units(NUM_SAMPLE_AVG) / calibrationFactor; // Get weight in grams
   xSemaphoreGive(dataMutex); // Release mutex after access
 
   // Check if the weight is stable
