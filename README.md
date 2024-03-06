@@ -13,13 +13,19 @@ There may be (probably a lot of) bugs and errors! You have been warned.
 #### Status: Most of the code has been written, though untested because I am still waiting on parts. 
 
 #### Design features: 
- - 128x64 OLED screen
- - Wood (Coaster) Weighing Platform
+ - 128x64 SSD1306 OLED screen
  - Lithium Battery powered with BMS
- - USB C charging 
+ - USB-C charging 
+ - HX711 + Load Cell
+ 
 ##### !Maybe! in the Future:
  - battery voltage reading with voltage divider with 2 equal resistors connected to GND + VBAT pins 
- 
+
+#### Software Features:
+ - Multi-threading with FreeRTOS
+ - BLE Communication over DecentScale API
+ - Fully transparent/invisible to Client e.g SmartApps
+
 ## Concept Renders
 These pictures are a Render of the 3D design and are subject to change.
 ![With cover](./img/wCover.PNG) With cover  
